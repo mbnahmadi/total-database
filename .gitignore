@@ -288,3 +288,4 @@ combineNC.py
 *.log
 *.ipynb
 TOTALDB_CYCLES/
+data_folder/

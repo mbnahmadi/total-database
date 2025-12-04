@@ -19,12 +19,20 @@ from .views import (
     WindForecastView, 
     WindForecastBoundingBoxView,
     WindArchiveView,
-    WindArchiveBoundingBoxView
+    WindArchiveBoundingBoxView,
+    WindForecastPointView_V01,
+    WindForecastBoundingBoxView_V01
     )
 
 urlpatterns = [
-    path('windforecast/station/', WindForecastView.as_view(), name='windforecast'),
-    path('windforecast/bbox/', WindForecastBoundingBoxView.as_view(), name='windforecastbbox'),
-    path('windarchive/station/', WindArchiveView.as_view(), name='windarchive'),
-    path('windarchive/bbox/', WindArchiveBoundingBoxView.as_view(), name='windarchivebbox'),
+    path('forecast/station/', WindForecastPointView_V01.as_view(), name='windforecastpoint_v01'),
+    path('forecast/bbox/', WindForecastBoundingBoxView_V01.as_view(), name='windforecastbbox_v01'),
+
+
+
+
+    # path('windforecast/station/', WindForecastView.as_view(), name='windforecast'),
+    # path('windforecast/bbox/', WindForecastBoundingBoxView.as_view(), name='windforecastbbox'),
+    # path('windarchive/station/', WindArchiveView.as_view(), name='windarchive'),
+    # path('windarchive/bbox/', WindArchiveBoundingBoxView.as_view(), name='windarchivebbox'),
 ]

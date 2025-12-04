@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Wave Forecast Heatmap</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #map { height: 700px; width: 100%; }
+        /* استایل‌های ساده برای نوار زمانی */
+        #time-controls { padding: 10px; background: #f0f0f0; }
+        .legend {
+            line-height: 18px;
+            color: #555;
+            background: white;
+            padding: 6px 8px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            border-radius: 5px;
+        }
+        .info {
+            padding: 6px 8px;
+            font: 14px/16px Arial, Helvetica, sans-serif;
+            background: white;
+            background: rgba(255,255,255,0.8);
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            border-radius: 5px;
+        }
+        #colorbar-gradient {
+            width: 100%;
+            height: 20px;
+            /* این گرادیان خطی باید با پالت رنگی Leaflet.heat مطابقت داشته باشد! */
+            background: linear-gradient(
+                to right, 
+                blue 0%, 
+                cyan 20%, 
+                lime 40%, 
+                yellow 70%, 
+                red 100%
+            ); 
+            margin-bottom: 5px;
+        }
+        #colorbar-labels {
+            font-size: 10px;
+            overflow: auto;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="time-controls">
+        <label for="time-slider">forecast time:</label>
+        <button id="prev-time">▶</button>
+        <span id="current-time-display">loading ...</span>
+        <button id="next-time">▶</button>
+    </div>
+    <div id="legend" class="info legend">
+        <h4>ارتفاع موج (متر)</h4>
+        <div id="colorbar-gradient"></div>
+        <div id="colorbar-labels">
+            <span style="float: left;">کم</span>
+            <span style="float: right;">زیاد</span>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    
+    <script>
+        // آدرس API شما در جنگو (باید با آدرس واقعی جایگزین شود)
+        const API_URL = '/api/wave/v2/wave-forecast-geojson/'; 
+        let map;
+        let heatLayer; // متغیری برای نگهداری لایه حرارتی Leaflet.heat
+        let allForecastTimes = []; // آرایه‌ای برای نگهداری تمام زمان‌های موجود
+        let currentTimeIndex = 0; // شاخص فعلی زمان
+
+        // ----------------------------------------------------
+        // الف) توابع کمکی
+        // ----------------------------------------------------
+
+        /**
+        * داده‌های GeoJSON را به فرمت مورد نیاز Leaflet.heat تبدیل می‌کند:
+        * [[lat, lng, intensity], [lat, lng, intensity], ...]
+        */
+        function geoJsonToHeatData(geojson) {
+            const heatData = [];
+            geojson.features.forEach(feature => {
+                const coords = feature.geometry.coordinates;
+                const hs = feature.properties.current_hs;
+                
+                // Leaflet مختصات را به صورت [latitude, longitude] می‌خواهد، اما GeoJSON [longitude, latitude] است.
+                // مقدار hs را به عنوان شدت (intensity) استفاده می‌کنیم.
+                if (hs !== null && hs > 0) {
+                    // 5: وزن‌دهی شدت (برای دید بهتر Heatmap، می‌توانید این مقدار را تنظیم کنید)
+                    const intensity = hs * 5; 
+                    heatData.push([coords[1], coords[0], intensity]); 
+                }
+            });
+            return heatData;
+        }
+
+
+        // ----------------------------------------------------
+        // ب) منطق بارگذاری داده و به‌روزرسانی نقشه
+        // ----------------------------------------------------
+
+        // 1. تابع اصلی برای بارگذاری داده از API و به‌روزرسانی Heatmap
+        async function loadAndUpdateHeatmap(time) {
+            // از Moment.js برای فرمت‌دهی زمان به ISO 8601 که API نیاز دارد استفاده می‌کنیم
+            const timeISO = moment(time).toISOString(); 
+            const fullApiUrl = `${API_URL}?time=${timeISO}`;
+
+            // نمایش زمان فعلی
+            document.getElementById('current-time-display').innerText = moment(time).format('YYYY/MM/DD HH:mm');
+
+            try {
+                const response = await fetch(fullApiUrl);
+                const geojson = await response.json();
+                
+                const heatData = geoJsonToHeatData(geojson);
+                
+                // حذف لایه قبلی اگر وجود داشت
+                if (heatLayer) {
+                    map.removeLayer(heatLayer);
+                }
+
+                // اضافه کردن لایه حرارتی جدید
+                heatLayer = L.heatLayer(heatData, {
+                    radius: 25, // شعاع نقاط Heatmap (برای smooth شدن باید بزرگ باشد)
+                    blur: 15,   // مقدار تاری (Blur) برای نرم‌تر شدن Heatmap
+                    max: 5,     // حداکثر مقدار شدت (بر اساس حداکثر موج مورد انتظار)
+                    gradient: {
+                        0.0: 'blue',       // امواج بسیار کوچک (نزدیک 0 متر)
+                        0.1: 'cyan',       // امواج کم (مثلا 1 متر)
+                        0.2: 'brown',
+                        0.3: 'orange',       // امواج متوسط (مثلا 2 متر)
+                        0.4: 'lime',
+                        0.5: 'purple',
+                        0.6: 'black',
+                        0.7: 'yellow',     // امواج نسبتا بالا (مثلا 3.5 متر)
+                        0.8: 'green',
+                        0.9: 'white',
+                        1.0: 'red'         // امواج بسیار بلند (مثلا 5 متر)
+                    } // پالت رنگی
+                }).addTo(map);
+
+            } catch (error) {
+                console.error('خطا در بارگذاری داده‌های موج:', error);
+            }
+        }
+
+        // 2. تابع برای راه‌اندازی کنترل‌های زمانی
+        function setupTimeControls() {
+            // در این مرحله، باید یک API جداگانه برای دریافت تمام زمان‌ها داشته باشید،
+            // یا فرض کنیم API قبلی اولین زمان را برمی‌گرداند تا بقیه محاسبه شوند.
+            // اما برای سادگی، فرض می‌کنیم یک لیست از زمان‌ها (مثلاً ۲۴۰ زمان ساعتی) داریم.
+            // **شما باید این لیست را از بک‌اند بیاورید.**
+            
+            // مثال ساده برای تولید زمان‌ها (باید با داده‌های واقعی شما جایگزین شود)
+            const baseTime = moment('2025-10-14T12:00:00Z');
+            for (let i = 0; i < 240; i++) { // 10 روز * 24 ساعت
+                allForecastTimes.push(baseTime.clone().add(i, 'hours'));
+            }
+
+            // هندلرهای دکمه‌ها
+            document.getElementById('next-time').addEventListener('click', () => {
+                if (currentTimeIndex < allForecastTimes.length - 1) {
+                    currentTimeIndex++;
+                    loadAndUpdateHeatmap(allForecastTimes[currentTimeIndex]);
+                }
+            });
+
+            document.getElementById('prev-time').addEventListener('click', () => {
+                if (currentTimeIndex > 0) {
+                    currentTimeIndex--;
+                    loadAndUpdateHeatmap(allForecastTimes[currentTimeIndex]);
+                }
+            });
+
+            // بارگذاری اولین زمان
+            loadAndUpdateHeatmap(allForecastTimes[currentTimeIndex]);
+        }
+        function initializeMap() {
+            // ... (کدهای قبلی راه‌اندازی نقشه)
+        
+            // ساخت کنترل کالر بار Leaflet
+            const legendControl = L.control({position: 'bottomright'});
+        
+            legendControl.onAdd = function (map) {
+                // از المان HTML که قبلا تعریف کردیم استفاده می‌کنیم
+                const div = L.DomUtil.get('legend'); 
+                // از کلیک/اسکرول روی کنترل جلوگیری می‌کنیم
+                L.DomEvent.disableClickPropagation(div); 
+                L.DomEvent.disableScrollPropagation(div);
+                return div;
+            };
+        
+            legendControl.addTo(map);
+        
+            setupTimeControls();
+        }
+
+        // 3. تابع مقداردهی اولیه نقشه
+        function initializeMap() {
+            // ایجاد نقشه با مختصات اولیه خلیج فارس
+            map = L.map('map').setView([27.5, 51.5], 7); 
+
+            // اضافه کردن Tile Layer (نقشه پایه)
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }).addTo(map);
+
+            setupTimeControls();
+            
+            // *نکته مهم*: اگر می‌خواهید بهینه‌سازی BBOX را اعمال کنید، 
+            // باید یک event listener برای 'moveend' نقشه اضافه کنید 
+            // که Heatmap را بر اساس دید فعلی نقشه فیلتر کند.
+        }
+
+        // شروع برنامه
+        document.addEventListener('DOMContentLoaded', initializeMap);    </script>
+
+</body>
+</html>

@@ -12,7 +12,210 @@ from django.utils.timezone import make_aware
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from django.contrib.gis.geos import Polygon
-# Create your views here.
+from django.conf import settings
+
+
+class WindForecastPointView_V01(APIView):
+
+    @swagger_auto_schema(
+        manual_parameters=[
+            openapi.Parameter('name', openapi.IN_QUERY, description="Station name (e.g. wind_station_1)", type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter('lat', openapi.IN_QUERY, description="Latitude (e.g. 25.5)", type=openapi.TYPE_NUMBER, required=True),
+            openapi.Parameter('lon', openapi.IN_QUERY, description="Longitude (e.g. 54.7)", type=openapi.TYPE_NUMBER, required=True),
+            openapi.Parameter('start_date', openapi.IN_QUERY, description="Start datetime (UTC)", type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter('end_date', openapi.IN_QUERY, description="End datetime (UTC)", type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter('params', openapi.IN_QUERY, description="Comma-separated list of parameters (e.g. ws10,temp,wind_direction)", type=openapi.TYPE_STRING, required=True),
+        ]
+    )
+    def get(self, request):
+        name = request.query_params.get('name')
+        lat = request.query_params.get('lat')
+        lon = request.query_params.get('lon')
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        params = [p.strip() for p in request.query_params.get('params', "").split(",") if p.strip()]
+
+        # انتخاب ایستگاه
+        station = None
+        if name:
+            station = WindStationModel.objects.filter(name=name).first()
+        elif lat and lon:
+            try:
+                point = Point(float(lon), float(lat), srid=4326)
+                station = WindStationModel.objects.annotate(distance=Distance('location', point)).order_by('distance').first()
+            except Exception:
+                return Response({"error": "Invalid coordinates"}, status=400)
+        else:
+            return Response({"error": "Provide 'name' or 'lat' and 'lon'"}, status=400)
+
+        if not station:
+            return Response({"error": "Station not found"}, status=404)
+
+        # فیلتر پیش‌بینی
+        forecasts = WindForecastModel.objects.filter(station=station).order_by("forecast_time")
+        if start_date and end_date:
+            forecasts = forecasts.filter(forecast_time__range=(start_date, end_date))
+        if not forecasts.exists():
+            return Response({"error": "No forecast data found"}, status=404)
+
+        # فیلدهای انتخابی
+        available_fields = [f.name for f in WindForecastModel._meta.fields if f.name not in ['id','station','forecast_time']]
+        selected_fields = [p for p in params if p in available_fields] or available_fields
+
+        # زمان و متادیتا
+        times = [f.forecast_time.isoformat() for f in forecasts]
+        units_dict = {"forecast_time_zone": "utc"}
+        for field in selected_fields:
+            if field in settings.WIND_PARAMETER_MAP:
+                units_dict[field] = settings.WIND_PARAMETER_MAP[field]["unit"]
+
+        # ساخت خروجی
+        data_dict = {"forecast_time": times}
+        for field in selected_fields:
+            data_dict[field] = [getattr(f, field) for f in forecasts]
+
+        response = {
+            "metadata": {"units": units_dict},
+            "latitude": station.location.y,
+            "longitude": station.location.x,
+            "data": data_dict
+        }
+
+        return Response(response, status=200)
+# ====================================================================
+class WindForecastBoundingBoxView_V01(APIView):
+
+    @swagger_auto_schema(
+        manual_parameters=[
+            openapi.Parameter('min_lat', openapi.IN_QUERY, type=openapi.TYPE_NUMBER, required=True),
+            openapi.Parameter('max_lat', openapi.IN_QUERY, type=openapi.TYPE_NUMBER, required=True),
+            openapi.Parameter('min_lon', openapi.IN_QUERY, type=openapi.TYPE_NUMBER, required=True),
+            openapi.Parameter('max_lon', openapi.IN_QUERY, type=openapi.TYPE_NUMBER, required=True),
+            openapi.Parameter('start_date', openapi.IN_QUERY, type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter('end_date', openapi.IN_QUERY, type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter('params', openapi.IN_QUERY, type=openapi.TYPE_STRING, required=True),
+        ]
+    )
+    def get(self, request):
+        try:
+            min_lat = float(request.query_params.get('min_lat'))
+            max_lat = float(request.query_params.get('max_lat'))
+            min_lon = float(request.query_params.get('min_lon'))
+            max_lon = float(request.query_params.get('max_lon'))
+        except Exception:
+            return Response({"error": "All bbox coordinates required and must be float."}, status=400)
+
+        # if (max_lat - min_lat > 0.5) or (max_lon - min_lon > 0.5):
+        #     return Response({"error": "Bounding box size must not exceed 0.5 degrees."}, status=400)
+
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        requested_params = request.query_params.get('params', "")
+        params = [p.strip() for p in requested_params.split(",") if p.strip()]
+
+        available_fields = [f.name for f in WindForecastModel._meta.fields if f.name not in ['id','station','forecast_time']]
+        selected_fields = [p for p in params if p in available_fields] or available_fields
+
+        bbox = Polygon.from_bbox((min_lon, min_lat, max_lon, max_lat))
+        stations = WindStationModel.objects.filter(location__within=bbox)
+        if not stations.exists():
+            return Response({"error": "No stations found in bbox."}, status=404)
+
+        forecasts = WindForecastModel.objects.filter(station__in=stations).order_by("station_id","forecast_time")
+        if start_date and end_date:
+            forecasts = forecasts.filter(forecast_time__range=(start_date, end_date))
+        if not forecasts.exists():
+            return Response({"error": "No forecast data for this bbox and time range."}, status=404)
+
+        # زمان مشترک فقط یکبار
+        times = sorted(list({f.forecast_time.isoformat() for f in forecasts}))
+
+        # متادیتا با واحد پارامترها
+        units_dict = {"forecast_time_zone": "utc"}
+        for field in selected_fields:
+            if field in settings.WIND_PARAMETER_MAP:
+                units_dict[field] = settings.WIND_PARAMETER_MAP[field]["unit"]
+
+        response_data = {
+            "metadata": {"units": units_dict, "forecast_time": times},
+            "stations": []
+        }
+
+        # داده‌ها بر اساس ایستگاه
+        stations_dict = {}
+        for f in forecasts:
+            st_id = f.station.id
+            if st_id not in stations_dict:
+                stations_dict[st_id] = {
+                    "latitude": f.station.location.y,
+                    "longitude": f.station.location.x,
+                    "data": {p: [] for p in selected_fields}
+                }
+            for field in selected_fields:
+                stations_dict[st_id]["data"][field].append(getattr(f, field))
+
+        response_data["stations"] = list(stations_dict.values())
+        return Response(response_data, status=200)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ========================================================================
 class WindForecastView(APIView):
     '''
     API: get wind forecast based on station name or location (lat/lon) and forecast_time.

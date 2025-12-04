@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Weather Tiles - MVP</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Leaflet CSS بدون integrity -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+    <style>
+        /* ارتفاع و پهنای نقشه */
+        #map { width: 100%; height: 100vh; margin:0; padding:0; }
+        body { margin:0; padding:0; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <!-- Leaflet JS بدون integrity -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // ایجاد نقشه با مرکز روی خلیج فارس
+        var map = L.map('map').setView([27.5, 52.5], 5);
+
+        // لایه پایه OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        // لایه هواشناسی از FastAPI
+        var weatherLayer = L.tileLayer('http://127.0.0.1:8000/tiles/{z}/{x}/{y}.png', {
+            opacity: 0.6,
+            attribution: 'Temperature T2',
+            maxZoom: 12
+        }).addTo(map);
+    </script>
+</body>
+</html>

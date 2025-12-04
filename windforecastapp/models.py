@@ -68,7 +68,7 @@ class WindArchiveModel(models.Model):
     forecast_time = models.DateTimeField(verbose_name=_("forecast_time"))
     temperature = models.FloatField(verbose_name=_("temperature"), help_text=_("Temperature at 2 meters above ground"))
     ws10 = models.FloatField(verbose_name=_("ws10"))
-    wind_direction = models.FloatField(verbose_name=_("wind_direction"))
+    wind_direction = models.PositiveIntegerField(verbose_name=_("wind_direction"))
     wg10 = models.FloatField(verbose_name=_("wg10"))
     ws50 = models.FloatField(verbose_name=_("ws50"))
     wg50 = models.FloatField(verbose_name=_("wg50"))

@@ -15,6 +15,7 @@ def create_mini_dataset_fun(f):
     v10 = ds['V10'].squeeze().values
     T2  = ds['T2'].squeeze().values
 
+
     # تبدیل time
     time = pd.to_datetime(ds['XTIME'].values)
     if time.ndim == 0:  # اگر فقط یک لحظه است
@@ -31,9 +32,13 @@ def create_mini_dataset_fun(f):
     # محاسبه سرعت و جهت باد
     WS10 = np.sqrt(u10**2 + v10**2)
     wind_direction = (np.arctan2(-u10, -v10) * 180 / np.pi) % 360
+    WG10 = WS10 * 1.3
+    WS50 = WS10 * 1.1488
+    WG50 = WS50 * 1.3
+
 
     # ابعاد داده‌ها را بررسی کن
-    print(f"Shape u10: {u10.shape}, time: {len(time)}, lat: {len(lat_1d)}, lon: {len(lon_1d)}")
+    # print(f"Shape u10: {u10.shape}, time: {len(time)}, lat: {len(lat_1d)}, lon: {len(lon_1d)}")
 
     # اگر فقط یک مقدار در بعد time است، reshape کن تا 3بعدی شود
     if u10.ndim == 2:
@@ -42,6 +47,10 @@ def create_mini_dataset_fun(f):
         T2 = T2[np.newaxis, :, :]
         WS10 = WS10[np.newaxis, :, :]
         wind_direction = wind_direction[np.newaxis, :, :]
+        WG10 = WG10[np.newaxis, :, :]
+        WS50 = WS50[np.newaxis, :, :]
+        WG50 = WG50[np.newaxis, :, :]
+
 
     # ساخت Dataset نهایی
     ds_combined = xr.Dataset(
@@ -49,8 +58,12 @@ def create_mini_dataset_fun(f):
             "u10": (["time", "lat", "lon"], u10),
             "v10": (["time", "lat", "lon"], v10),
             "T2":  (["time", "lat", "lon"], T2),
-            "wind_speed": (["time", "lat", "lon"], WS10),
+            "WS10": (["time", "lat", "lon"], WS10),
             "wind_direction": (["time", "lat", "lon"], wind_direction),
+            "WG10": (["time", "lat", "lon"], WG10),
+            "WS50": (["time", "lat", "lon"], WS50),
+            "WG50": (["time", "lat", "lon"], WG50),
+
         },
         coords={
             "time": time,

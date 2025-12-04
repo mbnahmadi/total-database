@@ -1,0 +1,178 @@
+<html lang="fa">
+<head>
+  <meta charset="UTF-8">
+  <title>نمایش دما و باد - نقشه</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-velocity@0.4.0/dist/leaflet-velocity.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-velocity@0.4.0/dist/leaflet-velocity.min.css" />
+  
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- leaflet-velocity -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-velocity/dist/leaflet-velocity.css" />
+    <script src="https://unpkg.com/leaflet-velocity/dist/leaflet-velocity.min.js"></script>
+
+
+  <style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+    .leaflet-top.leaflet-right { top: 60px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const map = L.map('map').setView([26.5, 54], 6);
+    
+      // نقشه پایه
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+    
+      let tempLayer = null;
+      let windLayer = null;
+    
+      // --- کنترل دما ---
+      const tempControl = L.control({position: 'topright'});
+      tempControl.onAdd = function () {
+        const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+        const button = L.DomUtil.create('a', '', div);
+        button.innerHTML = "🌡️ دما";
+        button.href = "#";
+        button.style.padding = "5px";
+        button.style.fontSize = "14px";
+        button.style.background = "white";
+        button.style.cursor = "pointer";
+    
+        L.DomEvent.on(button, 'click', function(e){
+          L.DomEvent.stopPropagation(e);
+          L.DomEvent.preventDefault(e);
+          if(tempLayer){
+            map.removeLayer(tempLayer);
+            tempLayer = null;
+          } else {
+            tempLayer = L.tileLayer('/tiles/{z}/{x}/{y}.png', {
+              tms: false,
+              maxZoom: 12,
+              attribution: '&copy; دما'
+            }).addTo(map);
+          }
+        });
+        return div;
+      };
+      tempControl.addTo(map);
+    
+      // --- کنترل باد ---
+      const windControl = L.control({position: 'topright'});
+      windControl.onAdd = function () {
+        const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+        const button = L.DomUtil.create('a', '', div);
+        button.innerHTML = "💨 باد";
+        button.href = "#";
+        button.style.padding = "5px";
+        button.style.fontSize = "14px";
+        button.style.background = "white";
+        button.style.cursor = "pointer";
+    
+        L.DomEvent.on(button, 'click', async function(e){
+          L.DomEvent.stopPropagation(e);
+          L.DomEvent.preventDefault(e);
+    
+          if (windLayer) {
+            map.removeLayer(windLayer);
+            windLayer = null;
+            return;
+          }
+    
+          const bbox = { min_lat: 27, max_lat: 28, min_lon: 49, max_lon: 50 };
+          const url = `http://127.0.0.1:8000/api/wind/v1/forecast/bbox/?min_lat=${bbox.min_lat}&max_lat=${bbox.max_lat}&min_lon=${bbox.min_lon}&max_lon=${bbox.max_lon}&params=ws10,wind_direction&start_date=2025-10-15&end_date=2025-10-16`;
+    
+          try {
+            const res = await fetch(url);
+            const data = await res.json();
+    
+            if (!data.stations || data.stations.length === 0) {
+              console.warn("⚠️ داده‌ای برای باد پیدا نشد");
+              return;
+            }
+    
+            const uValues = [];
+            const vValues = [];
+            const lons = [];
+            const lats = [];
+    
+            data.stations.forEach(st => {
+              const ws = st.data?.ws10?.[0] || 0;
+              const wd = st.data?.wind_direction?.[0] || 0;
+              const rad = wd * Math.PI / 180;
+              const u = -ws * Math.sin(rad);
+              const v = -ws * Math.cos(rad);
+              uValues.push(u);
+              vValues.push(v);
+              lons.push(st.longitude);
+              lats.push(st.latitude);
+            });
+    
+            const velocityData = [
+              {
+                header: {
+                  parameterCategory: 2,
+                  parameterNumber: 2, // U
+                  lo1: Math.min(...lons),
+                  la1: Math.max(...lats),
+                  dx: 1,
+                  dy: 1,
+                  nx: lons.length,
+                  ny: lats.length,
+                  refTime: new Date().toISOString()
+                },
+                data: uValues
+              },
+              {
+                header: {
+                  parameterCategory: 2,
+                  parameterNumber: 3, // V
+                  lo1: Math.min(...lons),
+                  la1: Math.max(...lats),
+                  dx: 1,
+                  dy: 1,
+                  nx: lons.length,
+                  ny: lats.length,
+                  refTime: new Date().toISOString()
+                },
+                data: vValues
+              }
+            ];
+    
+            windLayer = L.velocityLayer({
+              displayValues: true,
+              displayOptions: {
+                velocityType: "باد (m/s)",
+                position: "bottomleft",
+                emptyString: "بدون داده"
+              },
+              data: velocityData,
+              maxVelocity: 25,
+              velocityScale: 0.01,
+              colorScale: ['#00f', '#0ff', '#0f0', '#ff0', '#f00']
+            });
+    
+            windLayer.addTo(map);
+    
+          } catch (err) {
+            console.error("❌ خطا در بارگذاری داده‌های باد:", err);
+          }
+        });
+    
+        return div;
+      };
+      windControl.addTo(map);
+    });
+    </script>
+    
+</body>
+</html>

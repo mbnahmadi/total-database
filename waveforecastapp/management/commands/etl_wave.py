@@ -12,8 +12,8 @@ class Command(BaseCommand):
         # file_path_01 = 'G:\\MOBIN\\TOTALDB_CYCLES\\wave\\gfs.2025072112\\tab01.csv'
         # file_path_41 = 'G:\\MOBIN\\TOTALDB_CYCLES\\wave\\gfs.2025072112\\tab41.csv'
 
-        tab01_path = 'D:\\project\\TotalDB\\TOTALDB_CYCLES\\wave\\gfs.2025081112\\tab01.csv'
-        tab41_path = 'D:\\project\\TotalDB\\TOTALDB_CYCLES\\wave\\gfs.2025081112\\tab41.csv'
+        tab01_path = 'D:\\project\\TotalDB\\TOTALDB_CYCLES\\wave\\PersianGulf\\2025101412\\tab01.csv'
+        tab41_path = 'D:\\project\\TotalDB\\TOTALDB_CYCLES\\wave\\PersianGulf\\2025101412\\tab41.csv'
 
 
         try:

@@ -19,12 +19,20 @@ from .views import(
     WaveForecastView,
     WaveForecastBoundingBoxView,
     WaveArchiveView,
-    WaveArchiveBoundingBoxView
+    WaveArchiveBoundingBoxView,
+    WaveForecastView_V01,
+    WaveForecastBoundingBoxView_V01,
+    WaveForecastGeoJSONView
 )
 
 urlpatterns = [
-    path('waveforecast/station/', WaveForecastView.as_view(), name='waveforecast'),
-    path('waveforecast/bbox/', WaveForecastBoundingBoxView.as_view(), name='waveforecastbbox'),
-    path('wavearchive/station/', WaveArchiveView.as_view(), name='wavearchive'),
-    path('wavearchive/bbox/', WaveArchiveBoundingBoxView.as_view(), name='wavearchivebbox'),
+    path('v1/forecast/station/', WaveForecastView_V01.as_view(), name='waveforecast_V01'),
+    path('v1/forecast/bbox/', WaveForecastBoundingBoxView_V01.as_view(), name='waveforecastboundingbox_V01'),
+    path('v2/wave-forecast-geojson/', WaveForecastGeoJSONView.as_view(), name='wave_forecast_geojson_V02'),
+
+
+    # path('waveforecast/station/', WaveForecastView.as_view(), name='waveforecast'),
+    # path('waveforecast/bbox/', WaveForecastBoundingBoxView.as_view(), name='waveforecastbbox'),
+    # path('wavearchive/station/', WaveArchiveView.as_view(), name='wavearchive'),
+    # path('wavearchive/bbox/', WaveArchiveBoundingBoxView.as_view(), name='wavearchivebbox'),
 ]

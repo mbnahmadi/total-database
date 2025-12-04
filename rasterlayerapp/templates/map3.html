@@ -1,0 +1,58 @@
+<html lang="fa">
+<head>
+  <meta charset="UTF-8">
+  <title>نمایش دما - نقشه</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+    .leaflet-top.leaflet-right { top: 60px; } /* دکمه ها رو کمی پایین تر بیاریم */
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const map = L.map('map').setView([26.5, 54], 6);
+
+      // نقشه پایه OSM
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      let tempLayer = null;
+
+      // دکمه toggle برای لایه دما
+      const tempControl = L.control({position: 'topright'});
+      tempControl.onAdd = function () {
+        const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+        const button = L.DomUtil.create('a', '', div);
+        button.innerHTML = "🌡️ دما";
+        button.href = "#";
+        button.style.padding = "5px";
+        button.style.fontSize = "14px";
+        button.style.background = "white";
+        button.style.cursor = "pointer";
+
+        L.DomEvent.on(button, 'click', function(e){
+          L.DomEvent.stopPropagation(e);
+          L.DomEvent.preventDefault(e);
+          if(tempLayer){
+            map.removeLayer(tempLayer);
+            tempLayer = null;
+          } else {
+            tempLayer = L.tileLayer('/tiles/{z}/{x}/{y}.png', {
+              tms: false,
+              maxZoom: 12,
+              attribution: '&copy; دما'
+            }).addTo(map);
+          }
+        });
+        return div;
+      };
+      tempControl.addTo(map);
+    });
+  </script>
+</body>
+</html>
